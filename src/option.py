@@ -1,6 +1,6 @@
 import argparse
 
-import template
+from src import template
 
 parser = argparse.ArgumentParser(description="EDSR and MDSR")
 

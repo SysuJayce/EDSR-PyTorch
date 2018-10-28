@@ -2,9 +2,10 @@ import os
 
 import cv2
 import torch
-import utility
-from data import common
 from tqdm import tqdm
+
+from src import utility
+from src.data import common
 
 
 class VideoTester:

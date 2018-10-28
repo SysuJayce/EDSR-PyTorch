@@ -5,17 +5,15 @@ import time
 from multiprocessing import Process
 from multiprocessing import Queue
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-import numpy as np
 import imageio
-
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
+
+matplotlib.use("Agg")
 
 
 class timer:

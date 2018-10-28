@@ -1,4 +1,4 @@
-from data import srdata
+from src.data import srdata
 
 
 class SR291(srdata.SRData):

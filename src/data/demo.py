@@ -2,7 +2,8 @@ import os
 
 import imageio
 import torch.utils.data as data
-from data import common
+
+from src.data import common
 
 
 class Demo(data.Dataset):

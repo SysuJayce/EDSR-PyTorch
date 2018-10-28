@@ -1,17 +1,17 @@
-import data
-import loss
-import model
 import torch
-import utility
-from option import args
-from trainer import Trainer
+
+from src import data
+from src import loss
+from src import model
+from src import utility
+from src.option import args
+from src.trainer import Trainer
+from src.videotester import VideoTester
 
 torch.manual_seed(args.seed)
 checkpoint = utility.checkpoint(args)
 
 if args.data_test == "video":
-    from videotester import VideoTester
-
     model = model.Model(args, checkpoint)
     t = VideoTester(args, model, checkpoint)
     t.test()

@@ -5,7 +5,8 @@ import random
 
 import imageio
 import torch.utils.data as data
-from data import common
+
+from src.data import common
 
 
 class SRData(data.Dataset):
