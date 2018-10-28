@@ -1,14 +1,15 @@
+import torch.nn as nn
 from model import common
 
-import torch.nn as nn
-
 url = {
-    'r16f64': 'https://cv.snu.ac.kr/research/EDSR/models/mdsr_baseline-a00cab12.pt',
-    'r80f64': 'https://cv.snu.ac.kr/research/EDSR/models/mdsr-4a78bedf.pt'
+    "r16f64": "https://cv.snu.ac.kr/research/EDSR/models/mdsr_baseline-a00cab12.pt",
+    "r80f64": "https://cv.snu.ac.kr/research/EDSR/models/mdsr-4a78bedf.pt",
 }
+
 
 def make_model(args, parent=False):
     return MDSR(args)
+
 
 class MDSR(nn.Module):
     def __init__(self, args, conv=common.default_conv):
@@ -18,29 +19,31 @@ class MDSR(nn.Module):
         kernel_size = 3
         act = nn.ReLU(True)
         self.scale_idx = 0
-        self.url = url['r{}f{}'.format(n_resblocks, n_feats)]
+        self.url = url["r{}f{}".format(n_resblocks, n_feats)]
         self.sub_mean = common.MeanShift(args.rgb_range)
         self.add_mean = common.MeanShift(args.rgb_range, sign=1)
 
         m_head = [conv(args.n_colors, n_feats, kernel_size)]
 
-        self.pre_process = nn.ModuleList([
-            nn.Sequential(
-                common.ResBlock(conv, n_feats, 5, act=act),
-                common.ResBlock(conv, n_feats, 5, act=act)
-            ) for _ in args.scale
-        ])
+        self.pre_process = nn.ModuleList(
+            [
+                nn.Sequential(
+                    common.ResBlock(conv, n_feats, 5, act=act),
+                    common.ResBlock(conv, n_feats, 5, act=act),
+                )
+                for _ in args.scale
+            ]
+        )
 
         m_body = [
-            common.ResBlock(
-                conv, n_feats, kernel_size, act=act
-            ) for _ in range(n_resblocks)
+            common.ResBlock(conv, n_feats, kernel_size, act=act)
+            for _ in range(n_resblocks)
         ]
         m_body.append(conv(n_feats, n_feats, kernel_size))
 
-        self.upsample = nn.ModuleList([
-            common.Upsampler(conv, s, n_feats, act=False) for s in args.scale
-        ])
+        self.upsample = nn.ModuleList(
+            [common.Upsampler(conv, s, n_feats, act=False) for s in args.scale]
+        )
 
         m_tail = [conv(n_feats, args.n_colors, kernel_size)]
 
@@ -64,4 +67,3 @@ class MDSR(nn.Module):
 
     def set_scale(self, scale_idx):
         self.scale_idx = scale_idx
-

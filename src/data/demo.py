@@ -1,15 +1,12 @@
 import os
 
+import imageio
+import torch.utils.data as data
 from data import common
 
-import numpy as np
-import imageio
-
-import torch
-import torch.utils.data as data
 
 class Demo(data.Dataset):
-    def __init__(self, args, name='Demo', train=False, benchmark=False):
+    def __init__(self, args, name="Demo", train=False, benchmark=False):
         self.args = args
         self.name = name
         self.scale = args.scale
@@ -19,7 +16,7 @@ class Demo(data.Dataset):
 
         self.filelist = []
         for f in os.listdir(args.dir_demo):
-            if f.find('.png') >= 0 or f.find('.jp') >= 0:
+            if f.find(".png") >= 0 or f.find(".jp") >= 0:
                 self.filelist.append(os.path.join(args.dir_demo, f))
         self.filelist.sort()
 
@@ -36,4 +33,3 @@ class Demo(data.Dataset):
 
     def set_scale(self, idx_scale):
         self.idx_scale = idx_scale
-

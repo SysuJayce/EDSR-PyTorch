@@ -1,12 +1,13 @@
-import os
-import math
-import time
 import datetime
+import math
+import os
+import time
 from multiprocessing import Process
 from multiprocessing import Queue
 
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -16,7 +17,8 @@ import torch
 import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 
-class timer():
+
+class timer:
     def __init__(self):
         self.acc = 0
         self.tic()
@@ -26,7 +28,8 @@ class timer():
 
     def toc(self, restart=False):
         diff = time.time() - self.t0
-        if restart: self.t0 = time.time()
+        if restart:
+            self.t0 = time.time()
         return diff
 
     def hold(self):
@@ -41,41 +44,42 @@ class timer():
     def reset(self):
         self.acc = 0
 
-class checkpoint():
+
+class checkpoint:
     def __init__(self, args):
         self.args = args
         self.ok = True
         self.log = torch.Tensor()
-        now = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+        now = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
         if not args.load:
             if not args.save:
                 args.save = now
-            self.dir = os.path.join('..', 'experiment', args.save)
+            self.dir = os.path.join("..", "experiment", args.save)
         else:
-            self.dir = os.path.join('..', 'experiment', args.load)
+            self.dir = os.path.join("..", "experiment", args.load)
             if os.path.exists(self.dir):
-                self.log = torch.load(self.get_path('psnr_log.pt'))
-                print('Continue from epoch {}...'.format(len(self.log)))
+                self.log = torch.load(self.get_path("psnr_log.pt"))
+                print("Continue from epoch {}...".format(len(self.log)))
             else:
-                args.load = ''
+                args.load = ""
 
         if args.reset:
-            os.system('rm -rf ' + self.dir)
-            args.load = ''
+            os.system("rm -rf " + self.dir)
+            args.load = ""
 
         os.makedirs(self.dir, exist_ok=True)
-        os.makedirs(self.get_path('model'), exist_ok=True)
+        os.makedirs(self.get_path("model"), exist_ok=True)
         for d in args.data_test:
-            os.makedirs(self.get_path('results-{}'.format(d)), exist_ok=True)
+            os.makedirs(self.get_path("results-{}".format(d)), exist_ok=True)
 
-        open_type = 'a' if os.path.exists(self.get_path('log.txt'))else 'w'
-        self.log_file = open(self.get_path('log.txt'), open_type)
-        with open(self.get_path('config.txt'), open_type) as f:
-            f.write(now + '\n\n')
+        open_type = "a" if os.path.exists(self.get_path("log.txt")) else "w"
+        self.log_file = open(self.get_path("log.txt"), open_type)
+        with open(self.get_path("config.txt"), open_type) as f:
+            f.write(now + "\n\n")
             for arg in vars(args):
-                f.write('{}: {}\n'.format(arg, getattr(args, arg)))
-            f.write('\n')
+                f.write("{}: {}\n".format(arg, getattr(args, arg)))
+            f.write("\n")
 
         self.n_processes = 8
 
@@ -83,26 +87,23 @@ class checkpoint():
         return os.path.join(self.dir, *subdir)
 
     def save(self, trainer, epoch, is_best=False):
-        trainer.model.save(self.get_path('model'), epoch, is_best=is_best)
+        trainer.model.save(self.get_path("model"), epoch, is_best=is_best)
         trainer.loss.save(self.dir)
         trainer.loss.plot_loss(self.dir, epoch)
 
         self.plot_psnr(epoch)
-        torch.save(self.log, self.get_path('psnr_log.pt'))
-        torch.save(
-            trainer.optimizer.state_dict(),
-            self.get_path('optimizer.pt')
-        )
+        torch.save(self.log, self.get_path("psnr_log.pt"))
+        torch.save(trainer.optimizer.state_dict(), self.get_path("optimizer.pt"))
 
     def add_log(self, log):
         self.log = torch.cat([self.log, log])
 
     def write_log(self, log, refresh=False):
         print(log)
-        self.log_file.write(log + '\n')
+        self.log_file.write(log + "\n")
         if refresh:
             self.log_file.close()
-            self.log_file = open(self.get_path('log.txt'), 'a')
+            self.log_file = open(self.get_path("log.txt"), "a")
 
     def done(self):
         self.log_file.close()
@@ -110,20 +111,20 @@ class checkpoint():
     def plot_psnr(self, epoch):
         axis = np.linspace(1, epoch, epoch)
         for idx_data, d in enumerate(self.args.data_test):
-            label = 'SR on {}'.format(d)
+            label = "SR on {}".format(d)
             fig = plt.figure()
             plt.title(label)
             for idx_scale, scale in enumerate(self.args.scale):
                 plt.plot(
                     axis,
                     self.log[:, idx_data, idx_scale].numpy(),
-                    label='Scale {}'.format(scale)
+                    label="Scale {}".format(scale),
                 )
             plt.legend()
-            plt.xlabel('Epochs')
-            plt.ylabel('PSNR')
+            plt.xlabel("Epochs")
+            plt.ylabel("PSNR")
             plt.grid(True)
-            plt.savefig(self.get_path('test_{}.pdf'.format(d)))
+            plt.savefig(self.get_path("test_{}.pdf".format(d)))
             plt.close(fig)
 
     def begin_background(self):
@@ -133,40 +134,48 @@ class checkpoint():
             while True:
                 if not queue.empty():
                     filename, tensor = queue.get()
-                    if filename is None: break
+                    if filename is None:
+                        break
                     imageio.imwrite(filename, tensor.numpy())
-        
+
         self.process = [
-            Process(target=bg_target, args=(self.queue,)) \
+            Process(target=bg_target, args=(self.queue,))
             for _ in range(self.n_processes)
         ]
-        
-        for p in self.process: p.start()
+
+        for p in self.process:
+            p.start()
 
     def end_background(self):
-        for _ in range(self.n_processes): self.queue.put((None, None))
-        while not self.queue.empty(): time.sleep(1)
-        for p in self.process: p.join()
+        for _ in range(self.n_processes):
+            self.queue.put((None, None))
+        while not self.queue.empty():
+            time.sleep(1)
+        for p in self.process:
+            p.join()
 
     def save_results(self, dataset, filename, save_list, scale):
         if self.args.save_results:
             filename = self.get_path(
-                'results-{}'.format(dataset.dataset.name),
-                '{}_x{}_'.format(filename, scale)
+                "results-{}".format(dataset.dataset.name),
+                "{}_x{}_".format(filename, scale),
             )
 
-            postfix = ('SR', 'LR', 'HR')
+            postfix = ("SR", "LR", "HR")
             for v, p in zip(save_list, postfix):
                 normalized = v[0].mul(255 / self.args.rgb_range)
                 tensor_cpu = normalized.byte().permute(1, 2, 0).cpu()
-                self.queue.put(('{}{}.png'.format(filename, p), tensor_cpu))
+                self.queue.put(("{}{}.png".format(filename, p), tensor_cpu))
+
 
 def quantize(img, rgb_range):
     pixel_range = 255 / rgb_range
     return img.mul(pixel_range).clamp(0, 255).round().div(pixel_range)
 
+
 def calc_psnr(sr, hr, scale, rgb_range, dataset=None):
-    if hr.nelement() == 1: return 0
+    if hr.nelement() == 1:
+        return 0
 
     diff = (sr - hr) / rgb_range
     if dataset and dataset.dataset.benchmark:
@@ -183,35 +192,33 @@ def calc_psnr(sr, hr, scale, rgb_range, dataset=None):
 
     return -10 * math.log10(mse)
 
+
 def make_optimizer(args, my_model):
     trainable = filter(lambda x: x.requires_grad, my_model.parameters())
 
-    if args.optimizer == 'SGD':
+    if args.optimizer == "SGD":
         optimizer_function = optim.SGD
-        kwargs = {'momentum': args.momentum}
-    elif args.optimizer == 'ADAM':
+        kwargs = {"momentum": args.momentum}
+    elif args.optimizer == "ADAM":
         optimizer_function = optim.Adam
-        kwargs = {
-            'betas': args.betas,
-            'eps': args.epsilon
-        }
-    elif args.optimizer == 'RMSprop':
+        kwargs = {"betas": args.betas, "eps": args.epsilon}
+    elif args.optimizer == "RMSprop":
         optimizer_function = optim.RMSprop
-        kwargs = {'eps': args.epsilon}
+        kwargs = {"eps": args.epsilon}
 
-    kwargs['lr'] = args.lr
-    kwargs['weight_decay'] = args.weight_decay
-    
+    kwargs["lr"] = args.lr
+    kwargs["weight_decay"] = args.weight_decay
+
     return optimizer_function(trainable, **kwargs)
 
+
 def make_scheduler(args, my_optimizer):
-    if args.decay_type == 'step':
+    if args.decay_type == "step":
         scheduler_function = lrs.StepLR
-        kwargs = {'step_size': args.lr_decay, 'gamma': args.gamma}
-    elif args.decay_type.find('step') >= 0:
+        kwargs = {"step_size": args.lr_decay, "gamma": args.gamma}
+    elif args.decay_type.find("step") >= 0:
         scheduler_function = lrs.MultiStepLR
-        milestones = list(map(lambda x: int(x), args.decay_type.split('-')[1:]))
-        kwarg = {'milestones': milestones, 'gamma': args.gamma}
+        milestones = list(map(lambda x: int(x), args.decay_type.split("-")[1:]))
+        kwarg = {"milestones": milestones, "gamma": args.gamma}
 
     return scheduler_function(my_optimizer, **kwargs)
-
