@@ -18,22 +18,17 @@ class Trainer:
         self.model = my_model
         self.loss = my_loss
         self.optimizer = utility.make_optimizer(args, self.model)
-        self.scheduler = utility.make_scheduler(args, self.optimizer)
 
-        if self.args.load != "":
-            self.optimizer.load_state_dict(
-                torch.load(os.path.join(ckp.dir, "optimizer.pt"))
-            )
-            for _ in range(len(ckp.log)):
-                self.scheduler.step()
+        if self.args.load != '':
+            self.optimizer.load(ckp.dir, epoch=len(ckp.log))
 
         self.error_last = 1e8
 
     def train(self):
-        self.scheduler.step()
+        self.optimizer.schedule()
         self.loss.step()
-        epoch = self.scheduler.last_epoch + 1
-        lr = self.scheduler.get_lr()[0]
+        epoch = self.optimizer.get_last_epoch() + 1
+        lr = self.optimizer.get_lr()
 
         self.ckp.write_log(
             "[Epoch {}]\tLearning rate: {:.2e}".format(epoch, Decimal(lr))
@@ -76,9 +71,11 @@ class Trainer:
     def test(self):
         torch.set_grad_enabled(False)
 
-        epoch = self.scheduler.last_epoch + 1
-        self.ckp.write_log("\nEvaluation:")
-        self.ckp.add_log(torch.zeros(1, len(self.loader_test), len(self.scale)))
+        epoch = self.optimizer.get_last_epoch() + 1
+        self.ckp.write_log('\nEvaluation:')
+        self.ckp.add_log(
+            torch.zeros(1, len(self.loader_test), len(self.scale))
+        )
         self.model.eval()
 
         timer_test = utility.timer()
@@ -119,6 +116,7 @@ class Trainer:
 
         if self.args.save_results:
             self.ckp.end_background()
+
         if not self.args.test_only:
             self.ckp.save(self, epoch, is_best=(best[1][0, 0] + 1 == epoch))
 
@@ -141,5 +139,5 @@ class Trainer:
             self.test()
             return True
         else:
-            epoch = self.scheduler.last_epoch + 1
+            epoch = self.optimizer.get_last_epoch() + 1
             return epoch >= self.args.epochs

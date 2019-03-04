@@ -3,6 +3,7 @@ from importlib import import_module
 
 import torch
 import torch.nn as nn
+import torch.nn.parallel as P
 import torch.utils.model_zoo
 
 class Model(nn.Module):
@@ -23,10 +24,8 @@ class Model(nn.Module):
 
         module = import_module('model.' + args.model.lower())
         self.model = module.make_model(args).to(self.device)
-        if args.precision == 'half': self.model.half()
-
-        if not args.cpu and args.n_GPUs > 1:
-            self.model = nn.DataParallel(self.model, range(args.n_GPUs))
+        if args.precision == 'half':
+            self.model.half()
 
         self.load(
             ckp.get_path('model'),
@@ -38,32 +37,26 @@ class Model(nn.Module):
 
     def forward(self, x, idx_scale):
         self.idx_scale = idx_scale
-        target = self.get_model()
-        if hasattr(target, 'set_scale'): target.set_scale(idx_scale)
-        if self.self_ensemble and not self.training:
+        if hasattr(self.model, 'set_scale'):
+            self.model.set_scale(idx_scale)
+
+        if self.training:
+            if self.n_GPUs > 1:
+                return P.data_parallel(self.model, x, range(self.n_GPUs))
+            else:
+                return self.model(x)
+        else:
             if self.chop:
                 forward_function = self.forward_chop
             else:
                 forward_function = self.model.forward
 
-            return self.forward_x8(x, forward_function=forward_function)
-        elif self.chop and not self.training:
-            return self.forward_chop(x)
-        else:
-            return self.model(x)
-
-    def get_model(self):
-        if self.n_GPUs == 1:
-            return self.model
-        else:
-            return self.model.module
-
-    def state_dict(self, **kwargs):
-        target = self.get_model()
-        return target.state_dict(**kwargs)
+            if self.self_ensemble:
+                return self.forward_x8(x, forward_function=forward_function)
+            else:
+                return forward_function(x)
 
     def save(self, apath, epoch, is_best=False):
-        target = self.get_model()
         save_dirs = [os.path.join(apath, 'model_latest.pt')]
 
         if is_best:
@@ -73,15 +66,15 @@ class Model(nn.Module):
                 os.path.join(apath, 'model_{}.pt'.format(epoch))
             )
 
-        for s in save_dirs: torch.save(target.state_dict(), s)
+        for s in save_dirs:
+            torch.save(self.model.state_dict(), s)
 
     def load(self, apath, pre_train='', resume=-1, cpu=False):
+        load_from = None
+        kwargs = {}
         if cpu:
             kwargs = {'map_location': lambda storage, loc: storage}
-        else:
-            kwargs = {}
 
-        load_from = None
         if resume == -1:
             load_from = torch.load(
                 os.path.join(apath, 'model_latest.pt'),
@@ -93,7 +86,7 @@ class Model(nn.Module):
                 dir_model = os.path.join('..', 'models')
                 os.makedirs(dir_model, exist_ok=True)
                 load_from = torch.utils.model_zoo.load_url(
-                    self.get_model().url,
+                    self.model.url,
                     model_dir=dir_model,
                     **kwargs
                 )
@@ -106,61 +99,63 @@ class Model(nn.Module):
                 **kwargs
             )
 
-        if load_from: self.get_model().load_state_dict(load_from, strict=False)
+        if load_from:
+            self.model.load_state_dict(load_from, strict=False)
 
     def forward_chop(self, *args, shave=10, min_size=160000):
-        if self.input_large:
-            scale = 1
-        else:
-            scale = self.scale[self.idx_scale]
-
+        scale = 1 if self.input_large else self.scale[self.idx_scale]
         n_GPUs = min(self.n_GPUs, 4)
-        _, _, h, w = args[0].size()
-        h_half, w_half = h // 2, w // 2
-        h_size, w_size = h_half + shave, w_half + shave
-        list_x = [[
-            a[:, :, 0:h_size, 0:w_size],
-            a[:, :, 0:h_size, (w - w_size):w],
-            a[:, :, (h - h_size):h, 0:w_size],
-            a[:, :, (h - h_size):h, (w - w_size):w]
-        ] for a in args]
+        # height, width
+        h, w = args[0].size()[-2:]
 
-        list_y = []
-        if w_size * h_size < min_size:
+        top = slice(0, h//2 + shave)
+        bottom = slice(h - h//2 - shave, h)
+        left = slice(0, w//2 + shave)
+        right = slice(w - w//2 - shave, w)
+        x_chops = [torch.cat([
+            a[..., top, left],
+            a[..., top, right],
+            a[..., bottom, left],
+            a[..., bottom, right]
+        ]) for a in args]
+
+        y_chops = []
+        if h * w < 4 * min_size:
             for i in range(0, 4, n_GPUs):
-                x = [torch.cat(_x[i:(i + n_GPUs)], dim=0) for _x in list_x]
-                y = self.model(*x)
+                x = [x_chop[i:(i + n_GPUs)] for x_chop in x_chops]
+                y = P.data_parallel(self.model, *x, range(n_GPUs))
                 if not isinstance(y, list): y = [y]
-                if not list_y:
-                    list_y = [[c for c in _y.chunk(n_GPUs, dim=0)] for _y in y]
+                if not y_chops:
+                    y_chops = [[c for c in _y.chunk(n_GPUs, dim=0)] for _y in y]
                 else:
-                    for _list_y, _y in zip(list_y, y):
-                        _list_y.extend(_y.chunk(n_GPUs, dim=0))
+                    for y_chop, _y in zip(y_chops, y):
+                        y_chop.extend(_y.chunk(n_GPUs, dim=0))
         else:
-            for p in zip(*list_x):
+            for p in zip(*x_chops):
                 y = self.forward_chop(*p, shave=shave, min_size=min_size)
                 if not isinstance(y, list): y = [y]
-                if not list_y:
-                    list_y = [[_y] for _y in y]
+                if not y_chops:
+                    y_chops = [[_y] for _y in y]
                 else:
-                    for _list_y, _y in zip(list_y, y): _list_y.append(_y)
+                    for y_chop, _y in zip(y_chops, y): y_chop.append(_y)
 
-        h, w = scale * h, scale * w
-        h_half, w_half = scale * h_half, scale * w_half
-        h_size, w_size = scale * h_size, scale * w_size
-        shave *= scale
+        h *= scale
+        w *= scale
+        top = slice(0, h//2)
+        bottom = slice(h - h//2, h)
+        bottom_r = slice(h//2 - h, None)
+        left = slice(0, w//2)
+        right = slice(w - w//2, w)
+        right_r = slice(w//2 - w, None)
 
-        b, c, _, _ = list_y[0][0].size()
-        y = [_y[0].new(b, c, h, w) for _y in list_y]
-        for _list_y, _y in zip(list_y, y):
-            _y[:, :, :h_half, :w_half] \
-                = _list_y[0][:, :, :h_half, :w_half]
-            _y[:, :, :h_half, w_half:] \
-                = _list_y[1][:, :, :h_half, (w_size - w + w_half):]
-            _y[:, :, h_half:, :w_half] \
-                = _list_y[2][:, :, (h_size - h + h_half):, :w_half]
-            _y[:, :, h_half:, w_half:] \
-                = _list_y[3][:, :, (h_size - h + h_half):, (w_size - w + w_half):]
+        # batch size, number of color channels
+        b, c = y_chops[0][0].size()[:-2]
+        y = [y_chop[0].new(b, c, h, w) for y_chop in y_chops]
+        for y_chop, _y in zip(y_chops, y):
+            _y[..., top, left] = y_chop[0][..., top, left]
+            _y[..., top, right] = y_chop[1][..., top, right_r]
+            _y[..., bottom, left] = y_chop[2][..., bottom_r, left]
+            _y[..., bottom, right] = y_chop[3][..., bottom_r, right_r]
 
         if len(y) == 1: y = y[0]
 
@@ -212,4 +207,3 @@ class Model(nn.Module):
         if len(y) == 1: y = y[0]
 
         return y
-

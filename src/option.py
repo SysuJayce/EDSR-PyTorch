@@ -112,34 +112,25 @@ parser.add_argument(
 parser.add_argument("--gan_k", type=int, default=1, help="k value for adversarial loss")
 
 # Optimization specifications
-parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-parser.add_argument(
-    "--lr_decay", type=int, default=200, help="learning rate decay per N epochs"
-)
-parser.add_argument(
-    "--decay_type", type=str, default="step", help="learning rate decay type"
-)
-parser.add_argument(
-    "--gamma", type=float, default=0.5, help="learning rate decay factor for step decay"
-)
-parser.add_argument(
-    "--optimizer",
-    default="ADAM",
-    choices=("SGD", "ADAM", "RMSprop"),
-    help="optimizer to use (SGD | ADAM | RMSprop)",
-)
-parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
-parser.add_argument("--betas", type=tuple, default=(0.9, 0.999), help="ADAM beta")
-parser.add_argument(
-    "--epsilon", type=float, default=1e-8, help="ADAM epsilon for numerical stability"
-)
-parser.add_argument("--weight_decay", type=float, default=0, help="weight decay")
-parser.add_argument(
-    "--gclip",
-    type=float,
-    default=0,
-    help="gradient clipping threshold (0 = no clipping)",
-)
+parser.add_argument('--lr', type=float, default=1e-4,
+                    help='learning rate')
+parser.add_argument('--decay', type=str, default='200',
+                    help='learning rate decay type')
+parser.add_argument('--gamma', type=float, default=0.5,
+                    help='learning rate decay factor for step decay')
+parser.add_argument('--optimizer', default='ADAM',
+                    choices=('SGD', 'ADAM', 'RMSprop'),
+                    help='optimizer to use (SGD | ADAM | RMSprop)')
+parser.add_argument('--momentum', type=float, default=0.9,
+                    help='SGD momentum')
+parser.add_argument('--betas', type=tuple, default=(0.9, 0.999),
+                    help='ADAM beta')
+parser.add_argument('--epsilon', type=float, default=1e-8,
+                    help='ADAM epsilon for numerical stability')
+parser.add_argument('--weight_decay', type=float, default=0,
+                    help='weight decay')
+parser.add_argument('--gclip', type=float, default=0,
+                    help='gradient clipping threshold (0 = no clipping)')
 
 # Loss specifications
 parser.add_argument(

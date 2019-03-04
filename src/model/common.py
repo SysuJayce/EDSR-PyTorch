@@ -24,7 +24,8 @@ class MeanShift(nn.Conv2d):
         std = torch.Tensor(rgb_std)
         self.weight.data = torch.eye(3).view(3, 3, 1, 1) / std.view(3, 1, 1, 1)
         self.bias.data = sign * rgb_range * torch.Tensor(rgb_mean) / std
-        self.requires_grad = False
+        for p in self.parameters():
+            p.requires_grad = False
 
 
 class BasicBlock(nn.Sequential):
@@ -45,6 +46,7 @@ class BasicBlock(nn.Sequential):
             m.append(nn.BatchNorm2d(out_channels))
         if act is not None:
             m.append(act)
+
         super(BasicBlock, self).__init__(*m)
 
 
@@ -200,8 +202,7 @@ class Upsampler(nn.Sequential):
                 m.append(nn.PixelShuffle(2))
                 if bn:
                     m.append(nn.BatchNorm2d(n_feats))
-
-                if act == "relu":
+                if act == 'relu':
                     m.append(nn.ReLU(True))
                 elif act == "prelu":
                     m.append(nn.PReLU(n_feats))
@@ -211,8 +212,7 @@ class Upsampler(nn.Sequential):
             m.append(nn.PixelShuffle(3))
             if bn:
                 m.append(nn.BatchNorm2d(n_feats))
-
-            if act == "relu":
+            if act == 'relu':
                 m.append(nn.ReLU(True))
             elif act == "prelu":
                 m.append(nn.PReLU(n_feats))

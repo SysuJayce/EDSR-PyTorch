@@ -2,7 +2,10 @@ import torch.nn as nn
 
 
 class Discriminator(nn.Module):
-    def __init__(self, args, gan_type="GAN"):
+    '''
+        output is not normalized
+    '''
+    def __init__(self, args):
         super(Discriminator, self).__init__()
 
         in_channels = args.n_colors

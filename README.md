@@ -1,4 +1,14 @@
+# [Challenges for NTIRE 2019 is open!](http://www.vision.ee.ethz.ch/ntire19/)
+
+**The challenge winners will be awarded at the CVPR 2019 Workshop.**
+![](/figs/ntire2019.png)
+
 # EDSR-PyTorch
+
+**About PyTorch 1.0.0**
+  * We support PyTorch 1.0.0. If you prefer the previous versions of PyTorch, use legacy branches.
+  * ``--ext bin`` is not supported. Also, please erase your bin files with ``--ext sep-reset``. Once you successfully build those bin files, you can remove ``-reset`` from the argument.
+
 ![](/figs/main.png)
 
 This repository is an official PyTorch implementation of the paper **"Enhanced Deep Residual Networks for Single Image Super-Resolution"** from **CVPRW 2017, 2nd NTIRE**.
@@ -27,19 +37,13 @@ We provide scripts for reproducing all the results from our paper. You can train
 
 ## Dependencies
 * Python 3.6
-* PyTorch >= 0.4.0
+* PyTorch >= 1.0.0
 * numpy
 * skimage
 * **imageio**
 * matplotlib
 * tqdm
-* cv2 >= 3.xx (Only if you use video input/output)
-
-**Recent updates**
-
-* Oct 18, 2018
-  * with ``--pre_train download``, pretrained models will be automatically downloaded from server.
-  * Supports video input/output (inference only). Try with ``--data_test video --dir_demo [video file directory]``.
+* cv2 >= 3.xx (Only if you want to use video input/output)
 
 ## Code
 Clone this repository into any place you want.
@@ -89,6 +93,10 @@ You can evaluate your models with widely-used benchmark datasets:
 
 For these datasets, we first convert the result images to YCbCr color space and evaluate PSNR on the Y channel only. You can download [benchmark datasets](https://cv.snu.ac.kr/research/EDSR/benchmark.tar) (250MB). Set ``--dir_data <where_benchmark_folder_located>`` to evaluate the EDSR and MDSR with the benchmarks.
 
+You can download some results from [here](https://cv.snu.ac.kr/research/EDSR/result_image/edsr-results.tar).
+The link contains **EDSR+_baseline_x4** and **EDSR+_x4**.
+Otherwise, you can easily generate result images with ``demo.sh`` scripts.
+
 ## How to train EDSR and MDSR
 We used [DIV2K](http://www.vision.ee.ethz.ch/%7Etimofter/publications/Agustsson-CVPRW-2017.pdf) dataset to train our model. Please download it from [here](https://cv.snu.ac.kr/research/EDSR/DIV2K.tar) (7.1GB).
 
@@ -128,7 +136,6 @@ sh demo.sh
 
 * Feb 23, 2018
   * Now PyTorch 0.3.1 is default. Use legacy/0.3.0 branch if you use the old version.
-   
   * With a new ``src/data/DIV2K.py`` code, one can easily create new data class for super-resolution.
   * New binary data pack. (Please remove the ``DIV2K_decoded`` folder from your dataset if you have.)
   * With ``--ext bin``, this code will automatically generates and saves the binary data pack that corresponds to previous ``DIV2K_decoded``. (This requires huge RAM (~45GB, Swap can be used.), so please be careful.)
@@ -171,4 +178,8 @@ sh demo.sh
 * July 22, 2018
   * Thanks for recent commits that contains RDN and RCAN. Please see ``code/demo.sh`` to train/test those models.
   * Now the dataloader is much stable than the previous version. Please erase ``DIV2K/bin`` folder that is created before this commit. Also, please avoid to use ``--ext bin`` argument. Our code will automatically pre-decode png images before training. If you do not have enough spaces(~10GB) in your disk, we recommend ``--ext img``(But SLOW!).
+
+* Oct 18, 2018
+  * with ``--pre_train download``, pretrained models will be automatically downloaded from server.
+  * Supports video input/output (inference only). Try with ``--data_test video --dir_demo [video file directory]``.
 
