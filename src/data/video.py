@@ -3,7 +3,7 @@ import os
 import cv2
 import torch.utils.data as data
 
-from src.data import common
+from data import common
 
 
 class Video(data.Dataset):

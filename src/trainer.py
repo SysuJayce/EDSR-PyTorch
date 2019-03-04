@@ -1,10 +1,10 @@
-import os
 from decimal import Decimal
 
 import torch
 import torch.nn.utils as utils
-import utility
 from tqdm import tqdm
+
+import utility
 
 
 class Trainer:

@@ -1,6 +1,6 @@
 import os
 
-from src.data import div2k
+from data import div2k
 
 
 class DIV2KJPEG(div2k.DIV2K):

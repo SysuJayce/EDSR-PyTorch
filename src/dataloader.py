@@ -6,14 +6,11 @@ import torch
 import torch.multiprocessing as multiprocessing
 from torch._C import _set_worker_signal_handlers, _update_worker_pids
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataloader import _DataLoaderIter
-from torch.utils.data.dataloader import ManagerWatchdog
-from torch.utils.data.dataloader import _pin_memory_loop
-from torch.utils.data.dataloader import MP_STATUS_CHECK_INTERVAL
-
 from torch.utils.data.dataloader import ExceptionWrapper
-from torch.utils.data.dataloader import _use_shared_memory
-from torch.utils.data.dataloader import numpy_type_map
+from torch.utils.data.dataloader import MP_STATUS_CHECK_INTERVAL
+from torch.utils.data.dataloader import ManagerWatchdog
+from torch.utils.data.dataloader import _DataLoaderIter
+from torch.utils.data.dataloader import _pin_memory_loop
 from torch.utils.data.dataloader import default_collate
 
 if sys.version_info[0] == 2:

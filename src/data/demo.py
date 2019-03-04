@@ -3,7 +3,7 @@ import os
 import imageio
 import torch.utils.data as data
 
-from src.data import common
+from data import common
 
 
 class Demo(data.Dataset):

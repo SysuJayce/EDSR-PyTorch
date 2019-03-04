@@ -1,6 +1,6 @@
 import os
 
-from src.data import srdata
+from data import srdata
 
 
 class DIV2K(srdata.SRData):

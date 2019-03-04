@@ -1,9 +1,9 @@
 import torch
 
-import utility
 import data
-import model
 import loss
+import model
+import utility
 from option import args
 from trainer import Trainer
 
