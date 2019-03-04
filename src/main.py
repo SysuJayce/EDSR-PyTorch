@@ -1,12 +1,11 @@
 import torch
 
-from src import data
-from src import loss
-from src import model
-from src import utility
-from src.option import args
-from src.trainer import Trainer
-from src.videotester import VideoTester
+import utility
+import data
+import model
+import loss
+from option import args
+from trainer import Trainer
 
 torch.manual_seed(args.seed)
 checkpoint = utility.checkpoint(args)

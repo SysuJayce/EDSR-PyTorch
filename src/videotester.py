@@ -4,8 +4,8 @@ import cv2
 import torch
 from tqdm import tqdm
 
-from src import utility
-from src.data import common
+import utility
+from data import common
 
 
 class VideoTester:
