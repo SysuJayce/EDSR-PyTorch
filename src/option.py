@@ -174,6 +174,10 @@ parser.add_argument(
     help="save low-resolution and high-resolution images together",
 )
 
+# Fractal Network config
+parser.add_argument("--n_columns", type=int, default=4,
+                    help="number of columns to use in ResFractalBlock")
+
 args = parser.parse_args()
 template.set_template(args)
 
