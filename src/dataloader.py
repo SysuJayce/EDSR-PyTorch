@@ -12,6 +12,7 @@ from torch.utils.data.dataloader import ManagerWatchdog
 from torch.utils.data.dataloader import _DataLoaderIter
 from torch.utils.data.dataloader import _pin_memory_loop
 from torch.utils.data.dataloader import default_collate
+from torch.utils.data.dataloader import _set_SIGCHLD_handler
 
 if sys.version_info[0] == 2:
     import Queue as queue

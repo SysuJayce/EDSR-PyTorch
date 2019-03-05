@@ -38,6 +38,9 @@ class Loss(nn.modules.loss._Loss):
                     args,
                     loss_type
                 )
+            elif loss_type.find('DeepSupervisionL1') >= 0:
+                module = import_module('loss.deepsupervisionl1')
+                loss_function = getattr(module, 'DeepSupervisionL1')()
 
             self.loss.append({
                 'type': loss_type,

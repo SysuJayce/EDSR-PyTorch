@@ -106,6 +106,11 @@ class Model(nn.Module):
     def forward_chop(self, *args, shave=10, min_size=160000):
         scale = 1 if self.input_large else self.scale[self.idx_scale]
         n_GPUs = min(self.n_GPUs, 4)
+        # args = [arg for arg in args_]
+        # for i in range(len(args)):
+        #     while len(args[i].size()) < 4:
+        #         args[i] = args[i].unsqueeze(0)
+        #         print(args[i].size())
         # height, width
         h, w = args[0].size()[-2:]
 
@@ -133,6 +138,11 @@ class Model(nn.Module):
                         y_chop.extend(_y.chunk(n_GPUs, dim=0))
         else:
             for p in zip(*x_chops):
+                p = [arg for arg in p]
+                for i in range(len(p)):
+                    while len(p[i].size()) < 4:
+                        p[i] = p[i].unsqueeze(0)
+
                 y = self.forward_chop(*p, shave=shave, min_size=min_size)
                 if not isinstance(y, list): y = [y]
                 if not y_chops:

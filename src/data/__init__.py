@@ -28,7 +28,7 @@ class Data:
             self.loader_train = MSDataLoader(
                 args,
                 MyConcatDataset(datasets),
-                batch_size=args.batch_size,
+                batch_size=args.batch_size // args.accumulation_steps,
                 shuffle=True,
                 pin_memory=not args.cpu
             )

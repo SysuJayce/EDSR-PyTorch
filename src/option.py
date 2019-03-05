@@ -169,6 +169,11 @@ parser.add_argument(
 parser.add_argument("--n_columns", type=int, default=4,
                     help="number of columns to use in ResFractalBlock")
 
+# Option for low GPU memory for training
+parser.add_argument("--accumulation_steps", type=int, default=1,
+                    help="train in batch_size/accumulation_steps, then "
+                         "aggregate and average grads update as a final step")
+
 args = parser.parse_args()
 template.set_template(args)
 
