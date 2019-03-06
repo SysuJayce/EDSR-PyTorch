@@ -20,7 +20,7 @@ class MSRN(nn.Module):
         super().__init__()
 
         n_feats = 64
-        n_blocks = 8
+        n_blocks = args.n_resblocks
         kernel_size = 3
         scale = args.scale[0]
 
