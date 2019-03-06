@@ -192,6 +192,33 @@ class ResFractalBlock(nn.Module):
         return outs[-1]
 
 
+class MSRBlock(nn.Module):
+    def __init__(self, conv=default_conv, n_feats=64):
+        super().__init__()
+
+        kernel_size_1 = 3
+        kernel_size_2 = 5
+
+        self.conv_3_1 = conv(n_feats, n_feats, kernel_size_1)
+        self.conv_3_2 = conv(n_feats * 2, n_feats * 2, kernel_size_1)
+        self.conv_5_1 = conv(n_feats, n_feats, kernel_size_2)
+        self.conv_5_2 = conv(n_feats * 2, n_feats * 2, kernel_size_2)
+        self.confusion = nn.Conv2d(n_feats * 4, n_feats, 1, padding=0, stride=1)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        input_1 = x
+        output_3_1 = self.relu(self.conv_3_1(input_1))
+        output_5_1 = self.relu(self.conv_5_1(input_1))
+        input_2 = torch.cat([output_3_1, output_5_1], 1)
+        output_3_2 = self.relu(self.conv_3_2(input_2))
+        output_5_2 = self.relu(self.conv_5_2(input_2))
+        input_3 = torch.cat([output_3_2, output_5_2], 1)
+        output = self.confusion(input_3)
+        output += x
+        return output
+
+
 class Upsampler(nn.Sequential):
     def __init__(self, conv, scale, n_feats, bn=False, act=False, bias=True):
 
