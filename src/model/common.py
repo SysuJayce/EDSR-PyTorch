@@ -157,15 +157,21 @@ class ResFractalBlock(nn.Module):
 
             dist //= 2
 
-    @staticmethod
-    def join(outs):
+        self.weight = torch.ones((2), requires_grad=True) / 2
+
+    def join(self, outs):
         """
         Args:
             - outs: the outputs to join
             - global_cols: global drop path columns
         """
-        out = torch.stack(outs)  # [n_cols, B, C, H, W]
-        out = out.mean(dim=0)  # no drop
+        # out = torch.stack(outs)  # [n_cols, B, C, H, W]
+        # out = out.mean(dim=0)  # no drop
+        print("len(outs):", len(outs))
+        outs = torch.stack(outs)  # [n_cols, B, C, H, W]
+        out = torch.mul(outs[0], self.weight[0]) + torch.mul(outs[1],
+                                                             self.weight[1])
+        print("join weight:", self.weight)
 
         return out
 
