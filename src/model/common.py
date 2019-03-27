@@ -157,7 +157,8 @@ class ResFractalBlock(nn.Module):
 
             dist //= 2
 
-        self.weight = torch.ones((2), requires_grad=True) / 2
+        self.weight = nn.Parameter((torch.ones(4)).cuda())
+        self.weights = None
 
     def join(self, outs):
         """
@@ -167,12 +168,13 @@ class ResFractalBlock(nn.Module):
         """
         # out = torch.stack(outs)  # [n_cols, B, C, H, W]
         # out = out.mean(dim=0)  # no drop
-        print("len(outs):", len(outs))
-        outs = torch.stack(outs)  # [n_cols, B, C, H, W]
-        out = torch.mul(outs[0], self.weight[0]) + torch.mul(outs[1],
-                                                             self.weight[1])
-        print("join weight:", self.weight)
 
+        outs = torch.stack(outs)  # [n_cols, B, C, H, W]
+        self.weights = torch.nn.functional.softmax(self.weight[-len(outs):])
+
+        out = torch.mul(outs[0], self.weights[0])
+        for i in range(1, len(outs)):
+            out += torch.mul(outs[i], self.weights[i])
         return out
 
     def forward(self, x):
