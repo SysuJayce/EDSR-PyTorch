@@ -157,10 +157,49 @@ class ResFractalBlock(nn.Module):
 
             dist //= 2
 
-        self.weight = nn.Parameter((torch.ones(4)).cuda())
-        self.weights = None
+        joins = []
+        assert self.n_columns in (2, 3, 4), "only 2, 3, 4 columns are supported"
+        if self.n_columns == 2:
+            joins = [2]
+        elif self.n_columns == 3:
+            joins = [2, 3]
+        elif self.n_columns == 4:
+            joins = [2, 3, 2, 4]
 
-    def join(self, outs):
+        self.joinTimes = len(joins)
+
+        # self.weights = nn.ModuleList()
+        self.weights = []
+        for i in joins:
+            self.weights.append(nn.Parameter((torch.ones(i)).cuda()))
+
+        self.joinConv = nn.ModuleList()
+        for i in joins:
+            self.joinConv.append(default_conv(i * C_out, C_out, 1, bias=False))
+
+    def mean_join(self, outs, cnt=0):
+        """
+        Args:
+            - outs: the outputs to join
+            - global_cols: global drop path columns
+        """
+        outs = torch.stack(outs)  # [n_cols, B, C, H, W]
+        outs = outs.mean(dim=0)  # no drop
+        return outs
+
+    def conv_join(self, outs, cnt=0):
+        """
+        Args:
+            - outs: the outputs to join
+            - global_cols: global drop path columns
+        """
+        # out = torch.stack(outs)  # [n_cols, B, C, H, W]
+        # out = out.mean(dim=0)  # no drop
+
+        outs = torch.cat(outs, dim=1)  # [n_cols, B, C, H, W]
+        return self.joinConv[cnt](outs)
+
+    def weighted_join(self, outs, cnt=0):
         """
         Args:
             - outs: the outputs to join
@@ -170,15 +209,16 @@ class ResFractalBlock(nn.Module):
         # out = out.mean(dim=0)  # no drop
 
         outs = torch.stack(outs)  # [n_cols, B, C, H, W]
-        self.weights = torch.nn.functional.softmax(self.weight[-len(outs):])
+        weights = torch.nn.functional.softmax(self.weights[cnt])
 
-        out = torch.mul(outs[0], self.weights[0])
+        out = torch.mul(outs[0], weights[0])
         for i in range(1, len(outs)):
-            out += torch.mul(outs[i], self.weights[i])
+            out += torch.mul(outs[i], weights[i])
         return out
 
     def forward(self, x):
         outs = [x] * self.n_columns
+        cnt = 0
         for i in range(self.max_depth):
             st = self.n_columns - self.count[i]
             cur_outs = []  # outs of current depth
@@ -188,7 +228,14 @@ class ResFractalBlock(nn.Module):
                 cur_module = self.columns[c][i]  # current module
                 cur_outs.append(cur_module(cur_in))
 
-            joined = self.join(cur_outs)
+            if len(cur_outs) == 1:
+                joined = cur_outs[0]
+            else:
+                joined = self.conv_join(cur_outs, cnt)
+                # joined = self.weighted_join(cur_outs, cnt)
+                # joined = self.mean_join(cur_outs, cnt)
+                # joined = self.join(cur_outs, cnt)
+                cnt = (cnt + 1) % self.joinTimes
             for c in range(st, self.n_columns):
                 outs[c] = joined
 
