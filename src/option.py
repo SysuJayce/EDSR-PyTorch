@@ -174,6 +174,9 @@ parser.add_argument("--accumulation_steps", type=int, default=1,
                     help="train in batch_size/accumulation_steps, then "
                          "aggregate and average grads update as a final step")
 
+parser.add_argument('--force_y', action='store_true',
+                    help="use Y channel to evalute model when training")
+
 args = parser.parse_args()
 template.set_template(args)
 

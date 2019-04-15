@@ -171,12 +171,33 @@ def quantize(img, rgb_range):
     return img.mul(pixel_range).clamp(0, 255).round().div(pixel_range)
 
 
-def calc_psnr(sr, hr, scale, rgb_range, dataset=None):
+# def calc_psnr(sr, hr, scale, rgb_range, benchmark=False, force_y=False):
+#     diff = (sr - hr).data.div(rgb_range)
+#     if benchmark or force_y:
+#         shave = scale
+#         if diff.size(1) > 1:
+#             convert = diff.new(1, 3, 1, 1)
+#             convert[0, 0, 0, 0] = 65.738
+#             convert[0, 1, 0, 0] = 129.057
+#             convert[0, 2, 0, 0] = 25.064
+#             diff.mul_(convert).div_(256)
+#             diff = diff.sum(dim=1, keepdim=True)
+#     else:
+#         shave = scale + 6
+#
+#     valid = diff[:, :, shave:-shave, shave:-shave]
+#     mse = valid.pow(2).mean()
+#     # if mse <= 1e-8:
+#     #    return 100
+#     return -10 * math.log10(mse)
+
+
+def calc_psnr(sr, hr, scale, rgb_range, dataset=None, force_y=False):
     if hr.nelement() == 1:
         return 0
 
     diff = (sr - hr) / rgb_range
-    if dataset and dataset.dataset.benchmark:
+    if (dataset and dataset.dataset.benchmark) or force_y:
         shave = scale
         if diff.size(1) > 1:
             gray_coeffs = [65.738, 129.057, 25.064]
