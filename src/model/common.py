@@ -244,6 +244,9 @@ class ResFractalBlock(nn.Module):
         # can process the last elem only
         outs[-1] += x
 
+        # try this: useless
+        # outs[-1] = outs[-1] * 0.25 + x
+
         return outs[-1]
 
 

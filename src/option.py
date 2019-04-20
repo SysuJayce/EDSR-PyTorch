@@ -177,6 +177,12 @@ parser.add_argument("--accumulation_steps", type=int, default=1,
 parser.add_argument('--force_y', action='store_true',
                     help="use Y channel to evalute model when training")
 
+# multi-exit
+parser.add_argument('--multi_exit', action='store_true',
+                    help='multi exit for SR')
+parser.add_argument('--n_exits', type=int, default=4,
+                    help='number of exits in SR')
+
 args = parser.parse_args()
 template.set_template(args)
 
