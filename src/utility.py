@@ -93,6 +93,16 @@ class checkpoint:
         trainer.optimizer.save(self.dir)
         torch.save(self.log, self.get_path('psnr_log.pt'))
 
+    def save_scale(self, trainer, epoch, scale, is_best=False):
+        trainer.model.save_scale(self.get_path('model'), epoch, scale,
+                                 is_best=is_best)
+        trainer.loss.save_scale(self.dir, scale)
+        trainer.loss.plot_loss_scale(self.dir, epoch, scale)
+
+        torch.save(self.log, self.get_path('psnr_log_x' + str(scale) + '.pt'))
+        torch.save(trainer.optimizer.state_dict(),
+                os.path.join(self.dir, 'optimizer_x' + str(scale) + '.pt'))
+
     def add_log(self, log):
         self.log = torch.cat([self.log, log])
 

@@ -1,10 +1,5 @@
-from model import common
-
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
-from torch.autograd import Variable
 
 
 class DeepSupervisionL1(nn.Module):
@@ -16,7 +11,12 @@ class DeepSupervisionL1(nn.Module):
     def forward(self, srs, hr):
         total_loss = 0
         length = len(srs)
-        for sr in srs:
-            total_loss += F.l1_loss(sr, hr, size_average=self.size_average, reduce=self.reduce)
 
-        return total_loss / length
+        loss_exits = []
+        for sr in srs:
+            loss_exits.append(F.l1_loss(sr, hr, size_average=self.size_average,
+                                        reduce=self.reduce))
+            total_loss += loss_exits[-1]
+
+        loss_exits.insert(0, total_loss / length)
+        return loss_exits

@@ -28,25 +28,20 @@ class Loss(nn.modules.loss._Loss):
                 loss_function = nn.L1Loss()
             elif loss_type.find('VGG') >= 0:
                 module = import_module('loss.vgg')
-                loss_function = getattr(module, 'VGG')(
-                    loss_type[3:],
-                    rgb_range=args.rgb_range
-                )
+                loss_function = getattr(module, 'VGG')(loss_type[3:],
+                                                       rgb_range=args.rgb_range)
             elif loss_type.find('GAN') >= 0:
                 module = import_module('loss.adversarial')
-                loss_function = getattr(module, 'Adversarial')(
-                    args,
-                    loss_type
-                )
+                loss_function = getattr(module, 'Adversarial')(args, loss_type)
             elif loss_type.find('DeepSupervisionL1') >= 0:
                 module = import_module('loss.deepsupervisionl1')
                 loss_function = getattr(module, 'DeepSupervisionL1')()
+            elif loss_type.find('DeepSupervisionL2') >= 0:
+                module = import_module('loss.deepsupervisionl2')
+                loss_function = getattr(module, 'DeepSupervisionL2')()
 
-            self.loss.append({
-                'type': loss_type,
-                'weight': float(weight),
-                'function': loss_function}
-            )
+            self.loss.append({'type': loss_type, 'weight': float(weight),
+                              'function': loss_function})
             if loss_type.find('GAN') >= 0:
                 self.loss.append({'type': 'DIS', 'weight': 1, 'function': None})
 
@@ -59,24 +54,32 @@ class Loss(nn.modules.loss._Loss):
                 self.loss_module.append(l['function'])
 
         self.log = torch.Tensor()
+        self.args = args
 
         device = torch.device('cpu' if args.cpu else 'cuda')
         self.loss_module.to(device)
         if args.precision == 'half': self.loss_module.half()
         if not args.cpu and args.n_GPUs > 1:
-            self.loss_module = nn.DataParallel(
-                self.loss_module, range(args.n_GPUs)
-            )
+            self.loss_module = nn.DataParallel(self.loss_module,
+                                               range(args.n_GPUs))
 
-        if args.load != '': self.load(ckp.dir, cpu=args.cpu)
+        if args.load != '':
+            self.load(ckp.dir, cpu=args.cpu)
 
     def forward(self, sr, hr):
         losses = []
+        loss_exits = []
         for i, l in enumerate(self.loss):
             if l['function'] is not None:
-                loss = l['function'](sr, hr)
-                effective_loss = l['weight'] * loss
-                losses.append(effective_loss)
+                if self.args.multi_exit:
+                    loss = l['function'](sr, hr)
+                    effective_loss = l['weight'] * loss[0]
+                    losses.append(effective_loss)
+                    loss_exits.extend(loss[1:])
+                else:
+                    loss = l['function'](sr, hr)
+                    effective_loss = l['weight'] * loss
+                    losses.append(effective_loss)
                 self.log[-1, i] += effective_loss.item()
             elif l['type'] == 'DIS':
                 self.log[-1, i] += self.loss[i - 1]['function'].loss
@@ -85,7 +88,11 @@ class Loss(nn.modules.loss._Loss):
         if len(self.loss) > 1:
             self.log[-1, -1] += loss_sum.item()
 
-        return loss_sum
+        if self.args.multi_exit:
+            loss_exits.insert(0, loss_sum)
+            return loss_exits
+        else:
+            return loss_sum
 
     def step(self):
         for l in self.get_loss_module():
@@ -120,6 +127,20 @@ class Loss(nn.modules.loss._Loss):
             plt.savefig(os.path.join(apath, 'loss_{}.pdf'.format(l['type'])))
             plt.close(fig)
 
+    def plot_loss_scale(self, apath, epoch, scale):
+        axis = np.linspace(1, epoch, epoch)
+        for i, l in enumerate(self.loss):
+            label = '{} Loss'.format(l['type'])
+            fig = plt.figure()
+            plt.title(label)
+            plt.plot(axis, self.log[:, i].numpy(), label=label)
+            plt.legend()
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.grid(True)
+            plt.savefig('{}/loss_{}_x{}.pdf'.format(apath, l['type'], scale))
+            plt.close(fig)
+
     def get_loss_module(self):
         if self.n_GPUs == 1:
             return self.loss_module
@@ -130,18 +151,21 @@ class Loss(nn.modules.loss._Loss):
         torch.save(self.state_dict(), os.path.join(apath, 'loss.pt'))
         torch.save(self.log, os.path.join(apath, 'loss_log.pt'))
 
+    def save_scale(self, apath, scale):
+        torch.save(self.state_dict(),
+                   os.path.join(apath, 'loss_x' + str(scale) + '.pt'))
+        torch.save(self.log,
+                   os.path.join(apath, 'loss_x' + str(scale) + '_log.pt'))
+
     def load(self, apath, cpu=False):
         if cpu:
             kwargs = {'map_location': lambda storage, loc: storage}
         else:
             kwargs = {}
 
-        self.load_state_dict(torch.load(
-            os.path.join(apath, 'loss.pt'),
-            **kwargs
-        ))
+        self.load_state_dict(
+                torch.load(os.path.join(apath, 'loss.pt'), **kwargs))
         self.log = torch.load(os.path.join(apath, 'loss_log.pt'))
         for l in self.loss_module:
             if hasattr(l, 'scheduler'):
                 for _ in range(len(self.log)): l.scheduler.step()
-

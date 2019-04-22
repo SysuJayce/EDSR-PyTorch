@@ -48,7 +48,7 @@ class Model(nn.Module):
                 return self.model(x)
         else:
             if self.chop:
-                forward_function = self.forward_chop
+                forward_function = self.forward_chop if not self.args.multi_exit else self.forward_chop_for_multi_exit
             else:
                 forward_function = self.model.forward
 
@@ -69,6 +69,18 @@ class Model(nn.Module):
 
         for s in save_dirs:
             torch.save(self.model.state_dict(), s)
+
+    def save_scale(self, apath, epoch, scale, is_best=False):
+        target = self.model
+        torch.save(target.state_dict(),
+                   os.path.join(apath, 'model_latest_x' + str(scale) + '.pt'))
+        if is_best:
+            torch.save(target.state_dict(),
+                       os.path.join(apath, 'model_best_x' + str(scale) + '.pt'))
+
+        if self.save_models:
+            torch.save(target.state_dict(),
+                       os.path.join(apath, 'model_{}_x{}.pt'.format(epoch, scale)))
 
     def load(self, apath, pre_train='', resume=-1, cpu=False):
         load_from = None
@@ -171,6 +183,71 @@ class Model(nn.Module):
         if len(y) == 1: y = y[0]
 
         return y
+
+    def forward_chop_for_multi_exit(self, *args, shave=10, min_size=160000):
+        scale = 1 if self.input_large else self.scale[self.idx_scale]
+        n_GPUs = min(self.n_GPUs, 4)
+        # height, width
+        h, w = args[0].size()[-2:]
+
+        top = slice(0, h // 2 + shave)
+        bottom = slice(h - h // 2 - shave, h)
+        left = slice(0, w // 2 + shave)
+        right = slice(w - w // 2 - shave, w)
+        x_chops = [torch.cat(
+                [a[..., top, left], a[..., top, right], a[..., bottom, left],
+                    a[..., bottom, right]]) for a in args]
+
+        y_chops = [[] for _ in range(self.args.n_exits)]
+        if h * w < 4 * min_size:
+            for i in range(0, 4, n_GPUs):
+                x = [x_chop[i:(i + n_GPUs)] for x_chop in x_chops]
+                ys = P.data_parallel(self.model, *x, range(n_GPUs))
+                for i in range(self.args.n_exits):
+                    y = ys[i]
+                    if not isinstance(y, list): y = [y]
+                    if not y_chops[i]:
+                        y_chops[i] = [[c for c in _y.chunk(n_GPUs, dim=0)] for
+                                      _y in y]
+                    else:
+                        for y_chop, _y in zip(y_chops[i], y):
+                            y_chop.extend(_y.chunk(n_GPUs, dim=0))
+        else:
+            for p in zip(*x_chops):
+                ys = self.forward_chop_for_multi_exit(*p, shave=shave,
+                                                      min_size=min_size)
+                for i in range(self.args.n_exits):
+                    y = ys[i]
+                    if not isinstance(y, list): y = [y]
+                    if not y_chops[i]:
+                        y_chops[i] = [[_y] for _y in y]
+                    else:
+                        for y_chop, _y in zip(y_chops[i], y): y_chop.append(_y)
+
+        h *= scale
+        w *= scale
+        top = slice(0, h // 2)
+        bottom = slice(h - h // 2, h)
+        bottom_r = slice(h // 2 - h, None)
+        left = slice(0, w // 2)
+        right = slice(w - w // 2, w)
+        right_r = slice(w // 2 - w, None)
+
+        # batch size, number of color channels
+        outputs = []
+        b, c = y_chops[0][0][0].size()[:-2]
+        for i in range(self.args.n_exits):
+            y = [y_chop[0].new(b, c, h, w) for y_chop in y_chops[i]]
+            for y_chop, _y in zip(y_chops[i], y):
+                _y[..., top, left] = y_chop[0][..., top, left]
+                _y[..., top, right] = y_chop[1][..., top, right_r]
+                _y[..., bottom, left] = y_chop[2][..., bottom_r, left]
+                _y[..., bottom, right] = y_chop[3][..., bottom_r, right_r]
+
+            if len(y) == 1: y = y[0]
+            outputs.append(y)
+
+        return outputs
 
     def forward_x8(self, *args, forward_function=None):
         def _transform(v, op):

@@ -31,12 +31,12 @@ class Trainer:
         lr = self.optimizer.get_lr()
 
         self.ckp.write_log(
-            "[Epoch {}]\tLearning rate: {:.2e}".format(epoch, Decimal(lr))
-        )
+                '[Epoch {}]\tLearning rate: {:.2e}'.format(epoch, Decimal(lr)))
         self.loss.start_log()
         self.model.train()
 
         timer_data, timer_model = utility.timer(), utility.timer()
+        loss_exits = None
         for batch, (lr, hr, _, idx_scale) in enumerate(self.loader_train):
             lr, hr = self.prepare(lr, hr)
             timer_data.hold()
@@ -45,6 +45,13 @@ class Trainer:
             self.optimizer.zero_grad()
             sr = self.model(lr, idx_scale)
             loss = self.loss(sr, hr)
+            if loss_exits is None and self.args.multi_exit:
+                loss_exits = [0 for _ in range(len(sr))]
+            if self.args.multi_exit:
+                temp_loss = loss[1:]
+                for i in range(len(temp_loss)):
+                    loss_exits[i] += temp_loss[i] / self.args.print_every
+                loss = loss[0]
             loss.backward()
             if self.args.gclip > 0:
                 utils.clip_grad_value_(self.model.parameters(), self.args.gclip)
@@ -53,15 +60,23 @@ class Trainer:
             timer_model.hold()
 
             if (batch + 1) % self.args.print_every == 0:
-                self.ckp.write_log(
-                    "[{}/{}]\t{}\t{:.1f}+{:.1f}s".format(
-                        (batch + 1) * self.args.batch_size,
-                        len(self.loader_train.dataset),
-                        self.loss.display_loss(batch),
-                        timer_model.release(),
-                        timer_data.release(),
-                    )
-                )
+                if loss_exits:
+                    exits_loss_str = ""
+                    exits_loss_str += "E0" + ": %.4f" % loss_exits[0].item()
+                    for i in range(1, len(loss_exits)):
+                        exits_loss_str += " E" + str(i) + ": %.4f" % loss_exits[i].item()
+                    self.ckp.write_log('[{}/{}]\t{}\t{}\t{:.1f}+{:.1f}s'.format(
+                            (batch + 1) * self.args.batch_size,
+                            len(self.loader_train.dataset),
+                            self.loss.display_loss(batch), exits_loss_str,
+                            timer_model.release(), timer_data.release()))
+                    loss_exits = None
+                else:
+                    self.ckp.write_log('[{}/{}]\t{}\t{:.1f}+{:.1f}s'.format(
+                            (batch + 1) * self.args.batch_size,
+                            len(self.loader_train.dataset),
+                            self.loss.display_loss(batch),
+                            timer_model.release(), timer_data.release()))
 
             timer_data.tic()
 
@@ -73,9 +88,7 @@ class Trainer:
 
         epoch = self.optimizer.get_last_epoch() + 1
         self.ckp.write_log('\nEvaluation:')
-        self.ckp.add_log(
-            torch.zeros(1, len(self.loader_test), len(self.scale))
-        )
+        self.ckp.add_log(torch.zeros(1, len(self.loader_test), len(self.scale)))
         self.model.eval()
 
         timer_test = utility.timer()
@@ -84,36 +97,87 @@ class Trainer:
         for idx_data, d in enumerate(self.loader_test):
             for idx_scale, scale in enumerate(self.scale):
                 d.dataset.set_scale(idx_scale)
+                # eval_acc = 0
+                eval_accs = []
                 for lr, hr, filename, _ in tqdm(d, ncols=80):
                     lr, hr = self.prepare(lr, hr)
-                    sr = self.model(lr, idx_scale)
-                    sr = utility.quantize(sr, self.args.rgb_range)
 
-                    save_list = [sr]
-                    self.ckp.log[-1, idx_data, idx_scale] += utility.calc_psnr(
-                        sr, hr, scale, self.args.rgb_range, dataset=d,
-                        force_y=self.args.force_y
-                    )
-                    if self.args.save_gt:
-                        save_list.extend([lr, hr])
+                    if self.args.multi_exit:
+                        srs = self.model(lr, idx_scale)
+                        sr_num = len(srs)
+                        for i in range(sr_num):
+                            sr_filename = filename[0] + '_' + str(i + 1)
+                            sr = utility.quantize(srs[i], self.args.rgb_range)
+                            save_list = [sr]
 
-                    if self.args.save_results:
-                        self.ckp.save_results(d, filename[0], save_list, scale)
+                            if len(eval_accs) <= i:
+                                eval_accs.append(0)
+
+                            eval_accs[i] += utility.calc_psnr(sr, hr, scale,
+                                    self.args.rgb_range, dataset=d,
+                                    force_y=self.args.force_y)
+                            if i == sr_num - 1:
+                                self.ckp.log[
+                                    -1, idx_data, idx_scale] += utility.calc_psnr(
+                                        sr, hr, scale, self.args.rgb_range,
+                                        dataset=d, force_y=self.args.force_y)
+                                save_list.extend([lr, hr])
+
+                            if self.args.save_results:
+                                self.ckp.save_results(d, sr_filename,
+                                                      save_list, scale)
+                    else:
+                        sr = self.model(lr, idx_scale)
+                        sr = utility.quantize(sr, self.args.rgb_range)
+
+                        save_list = [sr]
+                        # self.ckp.log[-1, idx_data, idx_scale]
+                        self.ckp.log[
+                            -1, idx_data, idx_scale] += utility.calc_psnr(sr,
+                                hr, scale, self.args.rgb_range, dataset=d,
+                                force_y=self.args.force_y)
+                        if self.args.save_gt:
+                            save_list.extend([lr, hr])
+
+                        if self.args.save_results:
+                            self.ckp.save_results(d, filename[0], save_list,
+                                                  scale)
+
+                # if self.args.multi_exit:
+                #     max_eval_acc = 0
+                #     for i in range(len(eval_accs)):
+                #         if eval_accs[i] > max_eval_acc:
+                #             max_eval_acc = eval_accs[i]
+                #     eval_acc = max_eval_acc
 
                 self.ckp.log[-1, idx_data, idx_scale] /= len(d)
+                # self.ckp.log[-1, idx_data, idx_scale] = eval_acc / len(d)
                 best = self.ckp.log.max(0)
-                self.ckp.write_log(
-                    "[{} x{}]\tPSNR: {:.3f} (Best: {:.3f} @epoch {})".format(
-                        d.dataset.name,
-                        scale,
-                        self.ckp.log[-1, idx_data, idx_scale],
-                        best[0][idx_data, idx_scale],
-                        best[1][idx_data, idx_scale] + 1,
-                    )
-                )
+                if self.args.multi_exit:
+                    output_str = ""
+                    for i in range(len(eval_accs)):
+                        eval_accs[i] = eval_accs[i] / len(self.loader_test)
+                        output_str += (
+                                    "PSNR " + str(i) + ": %.3f " % eval_accs[i])
+                    self.ckp.write_log(
+                            '[{} x{}]\t{} (Best: {:.3f} @epoch {})'.format(
+                                    d.dataset.name, scale, output_str,
+                                    best[0][idx_data, idx_scale],
+                                    best[1][idx_data, idx_scale] + 1))
+                else:
+                    self.ckp.write_log(
+                            '[{} x{}]\tPSNR: {:.3f} (Best: {:.3f} @epoch {})'.format(
+                                    d.dataset.name, scale,
+                                    self.ckp.log[-1, idx_data, idx_scale],
+                                    best[0][idx_data, idx_scale],
+                                    best[1][idx_data, idx_scale] + 1))
+            if not self.args.test_only:
+                for idx_scale, scale in enumerate(self.scale):
+                    self.ckp.save_scale(self, epoch, scale, is_best=(
+                                best[1][idx_data, idx_scale] + 1 == epoch))
 
-        self.ckp.write_log("Forward: {:.2f}s\n".format(timer_test.toc()))
-        self.ckp.write_log("Saving...")
+        self.ckp.write_log('Forward: {:.2f}s\n'.format(timer_test.toc()))
+        self.ckp.write_log('Saving...')
 
         if self.args.save_results:
             self.ckp.end_background()
@@ -121,16 +185,16 @@ class Trainer:
         if not self.args.test_only:
             self.ckp.save(self, epoch, is_best=(best[1][0, 0] + 1 == epoch))
 
-        self.ckp.write_log("Total: {:.2f}s\n".format(timer_test.toc()), refresh=True)
+        self.ckp.write_log('Total: {:.2f}s\n'.format(timer_test.toc()),
+                refresh=True)
 
         torch.set_grad_enabled(True)
 
     def prepare(self, *args):
-        device = torch.device("cpu" if self.args.cpu else "cuda")
+        device = torch.device('cpu' if self.args.cpu else 'cuda')
 
         def _prepare(tensor):
-            if self.args.precision == "half":
-                tensor = tensor.half()
+            if self.args.precision == 'half': tensor = tensor.half()
             return tensor.to(device)
 
         return [_prepare(a) for a in args]
